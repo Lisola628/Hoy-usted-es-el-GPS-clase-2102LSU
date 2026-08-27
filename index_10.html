@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hoy usted es el GPS &middot; Direcciones en el campus</title>
+<script>
+/* Generador de códigos QR — modo byte, corrección de errores M, versiones 1 a 10.
+   Se usa para dibujar el código del mapa que escriba cada profesor.
+   Uso: QR.svg("https://ejemplo.com", "Texto alternativo") -> cadena SVG. */
+(function (global) {
+  "use strict";
+
+  /* --- tablas por versión (nivel M) --- */
+  var CAP = [0, 14, 26, 42, 62, 84, 106, 122, 152, 180, 213];
+  var TOTAL = [0, 26, 44, 70, 100, 134, 172, 196, 242, 292, 346];
+  var ECPB = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26];
+  /* bloques: [[cantidad, datos por bloque], ...] */
+  var BLOQUES = [
+    null,
+    [[1, 16]], [[1, 28]], [[1, 44]], [[2, 32]], [[2, 43]],
+    [[4, 27]], [[4, 31]], [[2, 38], [2, 39]], [[3, 36], [2, 37]], [[4, 43], [1, 44]]
+  ];
+  var ALIN = [
+    null, [], [6, 18], [6, 22], [6, 26], [6, 30],
+    [6, 34], [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]
+  ];
+
+  /* --- aritmética en GF(256) --- */
+  var EXP = new Array(512), LOG = new Array(256);
+  (function () {
+    var x = 1;
+    for (var i = 0; i < 255; i++) {
+      EXP[i] = x; LOG[x] = i;
+      x <<= 1;
+      if (x & 0x100) x ^= 0x11d;
+    }
+    for (var j = 255; j < 512; j++) EXP[j] = EXP[j - 255];
+  })();
+
+  function mul(a, b) { return (a === 0 || b === 0) ? 0 : EXP[LOG[a] + LOG[b]]; }
+
+  function polGen(grado) {
+    var p = [1];
+    for (var i = 0; i < grado; i++) {
+      var n = new Array(p.length + 1).fill(0);
+      for (var j = 0; j < p.length; j++) {
+        n[j] ^= p[j];
+        n[j + 1] ^= mul(p[j], EXP[i]);
+      }
+      p = n;
+    }
+    return p;
+  }
+
+  function ecc(datos, n) {
+    var g = polGen(n), r = datos.concat(new Array(n).fill(0));
+    for (var i = 0; i < datos.length; i++) {
+      var c = r[i];
+      if (c === 0) continue;
+      for (var j = 0; j < g.length; j++) r[i + j] ^= mul(g[j], c);
+    }
+    return r.slice(datos.length);
+  }
+
+  /* --- texto a bytes UTF-8 --- */
+  function bytes(txt) {
+    var s = unescape(encodeURIComponent(txt)), a = [];
+    for (var i = 0; i < s.length; i++) a.push(s.charCodeAt(i));
+    return a;
+  }
+
+  function codificar(txt) {
+    var dat = bytes(txt), v = 0;
+    for (var k = 1; k <= 10; k++) if (dat.length <= CAP[k]) { v = k; break; }
+    if (!v) throw new Error("El texto es demasiado largo para un código QR de versión 10.");
+
+    var bits = [];
+    function put(val, n) { for (var i = n - 1; i >= 0; i--) bits.push((val >> i) & 1); }
+
+    put(4, 4);
+    put(dat.length, v < 10 ? 8 : 16);
+    for (var i = 0; i < dat.length; i++) put(dat[i], 8);
+
+    var totalDatos = TOTAL[v] - ECPB[v] * BLOQUES[v].reduce(function (s, b) { return s + b[0]; }, 0);
+    var cap = totalDatos * 8;
+    for (var t = 0; t < 4 && bits.length < cap; t++) bits.push(0);
+    while (bits.length % 8) bits.push(0);
+
+    var cw = [];
+    for (var b = 0; b < bits.length; b += 8) {
+      var x = 0;
+      for (var q = 0; q < 8; q++) x = (x << 1) | bits[b + q];
+      cw.push(x);
+    }
+    var relleno = [0xec, 0x11], r = 0;
+    while (cw.length < totalDatos) cw.push(relleno[r++ % 2]);
+
+    /* repartir en bloques y calcular corrección */
+    var bloquesD = [], bloquesE = [], pos = 0;
+    BLOQUES[v].forEach(function (par) {
+      for (var i = 0; i < par[0]; i++) {
+        var d = cw.slice(pos, pos + par[1]);
+        pos += par[1];
+        bloquesD.push(d);
+        bloquesE.push(ecc(d, ECPB[v]));
+      }
+    });
+
+    /* intercalar */
+    var salida = [], maxD = Math.max.apply(null, bloquesD.map(function (d) { return d.length; }));
+    for (var c = 0; c < maxD; c++)
+      for (var bi = 0; bi < bloquesD.length; bi++)
+        if (c < bloquesD[bi].length) salida.push(bloquesD[bi][c]);
+    for (var e = 0; e < ECPB[v]; e++)
+      for (var bj = 0; bj < bloquesE.length; bj++) salida.push(bloquesE[bj][e]);
+
+    return { v: v, cw: salida };
+  }
+
+  /* --- matriz --- */
+  function matriz(v, cw) {
+    var n = v * 4 + 17;
+    var m = [], res = [];
+    for (var i = 0; i < n; i++) { m.push(new Array(n).fill(0)); res.push(new Array(n).fill(false)); }
+
+    function buscador(fr, fc) {
+      for (var r = -1; r <= 7; r++) for (var c = -1; c <= 7; c++) {
+        var y = fr + r, x = fc + c;
+        if (y < 0 || y >= n || x < 0 || x >= n) continue;
+        var dentro = (r >= 0 && r <= 6 && (c === 0 || c === 6)) ||
+                     (c >= 0 && c <= 6 && (r === 0 || r === 6)) ||
+                     (r >= 2 && r <= 4 && c >= 2 && c <= 4);
+        m[y][x] = dentro ? 1 : 0;
+        res[y][x] = true;
+      }
+    }
+    buscador(0, 0); buscador(0, n - 7); buscador(n - 7, 0);
+
+    for (var i2 = 8; i2 < n - 8; i2++) {
+      var b = (i2 % 2 === 0) ? 1 : 0;
+      m[6][i2] = b; res[6][i2] = true;
+      m[i2][6] = b; res[i2][6] = true;
+    }
+
+    var al = ALIN[v], u = al.length - 1;
+    for (var a = 0; a < al.length; a++) for (var b2 = 0; b2 < al.length; b2++) {
+      /* las tres esquinas coinciden con los buscadores y no se dibujan */
+      if ((a === 0 && b2 === 0) || (a === 0 && b2 === u) || (a === u && b2 === 0)) continue;
+      var ar = al[a], ac = al[b2];
+      for (var dr = -2; dr <= 2; dr++) for (var dc = -2; dc <= 2; dc++) {
+        m[ar + dr][ac + dc] = (Math.max(Math.abs(dr), Math.abs(dc)) !== 1) ? 1 : 0;
+        res[ar + dr][ac + dc] = true;
+      }
+    }
+
+    if (v >= 7) {
+      for (var vi = 0; vi < 6; vi++) for (var vj = 0; vj < 3; vj++) {
+        res[vi][n - 11 + vj] = true;
+        res[n - 11 + vj][vi] = true;
+      }
+    }
+
+    m[n - 8][8] = 1; res[n - 8][8] = true;
+    for (var f = 0; f < 9; f++) {
+      if (!res[8][f]) res[8][f] = true;
+      if (!res[f][8]) res[f][8] = true;
+    }
+    for (var g = 0; g < 8; g++) {
+      res[8][n - 1 - g] = true;
+      res[n - 1 - g][8] = true;
+    }
+
+    /* datos en zigzag */
+    var bits = [];
+    cw.forEach(function (x) { for (var i = 7; i >= 0; i--) bits.push((x >> i) & 1); });
+    var idx = 0, arriba = true;
+    for (var col = n - 1; col > 0; col -= 2) {
+      if (col === 6) col--;
+      for (var s = 0; s < n; s++) {
+        var fila = arriba ? (n - 1 - s) : s;
+        for (var k = 0; k < 2; k++) {
+          var cc = col - k;
+          if (res[fila][cc]) continue;
+          m[fila][cc] = (idx < bits.length) ? bits[idx] : 0;
+          idx++;
+        }
+      }
+      arriba = !arriba;
+    }
+
+    return { m: m, res: res, n: n };
+  }
+
+  function condicion(mk, r, c) {
+    switch (mk) {
+      case 0: return (r + c) % 2 === 0;
+      case 1: return r % 2 === 0;
+      case 2: return c % 3 === 0;
+      case 3: return (r + c) % 3 === 0;
+      case 4: return (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0;
+      case 5: return (r * c) % 2 + (r * c) % 3 === 0;
+      case 6: return ((r * c) % 2 + (r * c) % 3) % 2 === 0;
+      default: return ((r + c) % 2 + (r * c) % 3) % 2 === 0;
+    }
+  }
+
+  function formato(mk, m, n) {
+    var d = (0 << 3) | mk;             /* 00 = nivel M */
+    var v = d << 10;
+    for (var i = 4; i >= 0; i--) if ((v >> (i + 10)) & 1) v ^= 0x537 << i;
+    var f = ((d << 10) | v) ^ 0x5412;
+    for (var j = 0; j < 15; j++) {
+      var b = (f >> j) & 1;
+      /* copia 1: sube por la columna 8 y sigue por la fila 8 */
+      if (j < 6) m[j][8] = b;
+      else if (j === 6) m[7][8] = b;
+      else if (j === 7) m[8][8] = b;
+      else if (j === 8) m[8][7] = b;
+      else m[8][14 - j] = b;
+      /* copia 2: fila 8 a la derecha, columna 8 abajo */
+      if (j < 8) m[8][n - 1 - j] = b;
+      else m[n - 15 + j][8] = b;
+    }
+  }
+
+  /* información de versión — obligatoria a partir de la versión 7 */
+  function versionInfo(v, m, n) {
+    if (v < 7) return;
+    var r = v << 12;
+    for (var i = 5; i >= 0; i--) if ((r >> (i + 12)) & 1) r ^= 0x1f25 << i;
+    var d = (v << 12) | r;
+    for (var j = 0; j < 18; j++) {
+      var b = (d >> j) & 1, fila = Math.floor(j / 3), col = j % 3;
+      m[fila][n - 11 + col] = b;
+      m[n - 11 + col][fila] = b;
+    }
+  }
+
+  function penal(m, n) {
+    var p = 0, r, c, i;
+    for (r = 0; r < n; r++) for (c = 0; c < n; c++) {
+      if (c < n - 1 && r < n - 1 &&
+          m[r][c] === m[r][c + 1] && m[r][c] === m[r + 1][c] && m[r][c] === m[r + 1][c + 1]) p += 3;
+    }
+    for (r = 0; r < n; r++) {
+      var run = 1;
+      for (c = 1; c < n; c++) {
+        if (m[r][c] === m[r][c - 1]) { run++; } else { if (run >= 5) p += run - 2; run = 1; }
+      }
+      if (run >= 5) p += run - 2;
+    }
+    for (c = 0; c < n; c++) {
+      var run2 = 1;
+      for (r = 1; r < n; r++) {
+        if (m[r][c] === m[r - 1][c]) { run2++; } else { if (run2 >= 5) p += run2 - 2; run2 = 1; }
+      }
+      if (run2 >= 5) p += run2 - 2;
+    }
+    var osc = 0;
+    for (r = 0; r < n; r++) for (c = 0; c < n; c++) if (m[r][c]) osc++;
+    p += Math.floor(Math.abs(osc * 100 / (n * n) - 50) / 5) * 10;
+    return p;
+  }
+
+  function generar(txt) {
+    var e = codificar(txt);
+    var mejor = null, mejorP = Infinity;
+    for (var mk = 0; mk < 8; mk++) {
+      var b = matriz(e.v, e.cw);
+      for (var r = 0; r < b.n; r++) for (var c = 0; c < b.n; c++)
+        if (!b.res[r][c] && condicion(mk, r, c)) b.m[r][c] ^= 1;
+      formato(mk, b.m, b.n);
+      versionInfo(e.v, b.m, b.n);
+      var p = penal(b.m, b.n);
+      if (p < mejorP) { mejorP = p; mejor = b; }
+    }
+    return mejor.m;
+  }
+
+  function svg(txt, alt) {
+    var m = generar(txt), n = m.length, q = 2, t = n + q * 2, d = [];
+    for (var y = 0; y < n; y++) {
+      var x = 0;
+      while (x < n) {
+        if (m[y][x]) {
+          var x0 = x;
+          while (x < n && m[y][x]) x++;
+          d.push("M" + (x0 + q) + " " + (y + q) + "h" + (x - x0) + "v1h-" + (x - x0) + "z");
+        } else x++;
+      }
+    }
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + t + ' ' + t +
+      '" shape-rendering="crispEdges" role="img" aria-label="' +
+      String(alt || "Código QR").replace(/[<>&"]/g, "") + '">' +
+      '<rect width="' + t + '" height="' + t + '" fill="#fff"/>' +
+      '<path d="' + d.join("") + '" fill="#000"/></svg>';
+  }
+
+  global.QR = { svg: svg, matriz: generar };
+})(typeof globalThis !== "undefined" ? globalThis : this);
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Barlow:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --tinta:#14181F;--placa:#123A73;--ambar:#7A4A0E;--linea:#E5A400;--gris:#4A5464;--fondo:#EDF1F6;
+  --display:"Barlow",Arial,sans-serif;--body:"Atkinson Hyperlegible",Verdana,sans-serif;--rail:80px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--fondo);color:var(--tinta);font-family:var(--body);
+  font-size:clamp(19px,1.6vw,26px);line-height:1.6;overflow:hidden}
+
+.ruta{position:fixed;left:0;top:0;bottom:0;width:var(--rail);background:var(--tinta);z-index:20}
+.ruta-avance{position:absolute;top:0;left:50%;transform:translateX(-50%);width:12px;
+  background:var(--linea);height:0;transition:height .45s ease}
+.ruta-num{position:absolute;bottom:22px;width:100%;text-align:center;font-family:var(--display);
+  font-weight:700;font-size:18px;color:#fff}
+
+.mazo{position:relative;height:100%;margin-left:var(--rail)}
+.lamina{position:absolute;inset:0;padding:clamp(24px,3.5vw,56px) clamp(22px,4.1vw,76px);
+  display:none;flex-direction:column;justify-content:center;overflow-y:auto}
+.lamina.activa{display:flex}
+
+.placa{display:inline-block;align-self:flex-start;background:var(--placa);color:#fff;
+  font-family:var(--display);font-weight:700;font-size:clamp(15px,1.2vw,19px);
+  letter-spacing:.1em;text-transform:uppercase;padding:.5em 1em;margin-bottom:clamp(12px,1.5vw,20px)}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(38px,5.8vw,84px);line-height:1.03}
+h2{font-family:var(--display);font-weight:700;font-size:clamp(29px,4vw,54px);line-height:1.06}
+.gloss{color:var(--gris);font-style:italic;font-size:.83em;margin-top:.55em;max-width:54ch}
+.lamina > .gloss{margin-bottom:clamp(14px,1.8vw,24px)}
+
+ol.tareas{list-style:none;padding-left:0;counter-reset:t;display:grid;gap:.6em;max-width:66ch}
+ol.tareas li{counter-increment:t;position:relative;padding-left:2.4em}
+ol.tareas li::before{content:counter(t);position:absolute;left:0;top:.05em;width:1.62em;height:1.62em;
+  display:grid;place-items:center;background:var(--placa);color:#fff;
+  font-family:var(--display);font-weight:700;font-size:.79em}
+
+.frases{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));
+  gap:.45em 1.5em;max-width:1060px}
+.frases div{display:flex;gap:.65em;align-items:baseline;border-bottom:2px solid rgba(20,24,31,.18);padding-bottom:.4em}
+.frases b{font-family:var(--display);font-weight:700;font-size:1.05em;color:var(--placa);white-space:nowrap}
+.frases span{color:var(--gris);font-size:.79em;font-style:italic}
+
+.reglas{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(245px,100%),1fr));
+  gap:clamp(12px,1.5vw,20px);max-width:1160px}
+.regla{background:#fff;border:2px solid var(--tinta);border-top:8px solid var(--linea);
+  padding:clamp(13px,1.4vw,20px)}
+.regla h3{font-family:var(--display);font-weight:700;font-size:1.08em;margin-bottom:.28em;color:var(--placa)}
+.regla p{font-size:.84em}
+
+.contraste{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));
+  gap:clamp(14px,1.8vw,26px);max-width:940px}
+.col{padding:clamp(15px,1.7vw,24px);background:#fff;border:3px solid var(--placa)}
+.col.tu{border-color:var(--ambar);border-style:dashed}
+.col h3{font-family:var(--display);font-weight:700;font-size:1.5em;margin-bottom:.1em}
+.col.tu h3{color:var(--ambar)}
+.col.ud h3{color:var(--placa)}
+.col .quien{font-size:.77em;font-style:italic;color:var(--gris);margin-bottom:.7em}
+.col p.ej{font-size:1.05em;font-weight:700;line-height:1.45}
+
+.nota{margin-top:clamp(14px,1.8vw,24px);border-left:6px solid var(--linea);
+  padding:.45em 0 .45em 1em;font-size:.86em;max-width:68ch}
+.nota b{font-family:var(--display)}
+
+.mapa-fila{display:flex;gap:clamp(18px,2.6vw,40px);align-items:center;flex-wrap:wrap;margin-top:.4em}
+.qr{width:clamp(140px,15vw,210px);flex-shrink:0;background:#fff;padding:10px;border:3px solid var(--tinta)}
+.qr svg{display:block;width:100%;height:auto}
+.qr[hidden]{display:none}
+.destinos{display:flex;flex-wrap:wrap;gap:.5em;max-width:1060px;margin-top:.3em}
+.destinos li{list-style:none;background:#fff;border:2px solid var(--placa);
+  padding:.3em .75em;font-family:var(--display);font-weight:600;font-size:.96em}
+
+.enlace{font-family:var(--display);font-weight:700;font-size:clamp(20px,2.1vw,30px);
+  color:var(--placa);word-break:break-all;margin-top:.3em}
+
+.preguntas{display:grid;gap:.55em;max-width:66ch;list-style:none;padding:0}
+.preguntas li{background:#fff;border-left:8px solid var(--ambar);padding:.5em .9em;font-size:.92em}
+.preguntas b{color:var(--ambar)}
+
+.nav{position:fixed;right:clamp(12px,1.6vw,24px);bottom:clamp(12px,1.6vw,24px);display:flex;gap:8px;z-index:30}
+.nav button{font-family:var(--display);font-weight:700;font-size:17px;background:var(--tinta);
+  color:#fff;border:2px solid var(--tinta);padding:.55em 1.05em;cursor:pointer}
+.nav button:hover{background:var(--placa);border-color:var(--placa)}
+.nav button:focus-visible,.preparar:focus-visible{outline:4px solid var(--linea);outline-offset:2px}
+.pie{position:fixed;left:calc(var(--rail) + 12px);bottom:14px;z-index:30;
+  display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pie a{font-family:var(--display);font-weight:700;font-size:14px;background:#fff;
+  border:2px solid var(--gris);color:var(--gris);padding:7px 12px;text-decoration:none}
+.pie a:hover{color:var(--placa);border-color:var(--placa)}
+.pie a:focus-visible{outline:4px solid var(--linea);outline-offset:2px}
+.preparar{position:relative;z-index:30;
+  font-family:var(--display);font-weight:700;font-size:14px;background:#fff;
+  border:2px solid var(--gris);color:var(--gris);cursor:pointer;padding:7px 12px}
+.preparar:hover{color:var(--placa);border-color:var(--placa)}
+
+/* ---- panel de preparación ---- */
+.panel{position:fixed;inset:0;background:rgba(20,24,31,.72);z-index:60;
+  display:none;overflow-y:auto;padding:24px}
+.panel[open]{display:block}
+.panel-caja{background:#fff;max-width:760px;margin:0 auto;padding:clamp(22px,3vw,40px);
+  border:4px solid var(--tinta);font-size:18px;line-height:1.55}
+.panel-caja h2{font-size:clamp(26px,3vw,38px);margin-bottom:.2em}
+.panel-caja > p.intro{color:var(--gris);font-style:italic;font-size:16px;margin-bottom:20px}
+.campo{margin-bottom:20px}
+.campo label{display:block;font-family:var(--display);font-weight:700;font-size:17px;margin-bottom:3px}
+.campo .ayuda{display:block;color:var(--gris);font-style:italic;font-size:14.5px;margin-bottom:7px}
+.campo input,.campo textarea{width:100%;font-family:var(--body);font-size:17px;
+  padding:.55em .7em;border:3px solid var(--placa);background:#fff;color:var(--tinta)}
+.campo textarea{min-height:170px;resize:vertical;line-height:1.5}
+.campo input:focus-visible,.campo textarea:focus-visible{outline:4px solid var(--linea);outline-offset:2px}
+.panel-botones{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.panel-botones button{font-family:var(--display);font-weight:700;font-size:17px;
+  padding:.6em 1.2em;cursor:pointer;border:3px solid var(--placa)}
+.b-primario{background:var(--placa);color:#fff}
+.b-secundario{background:#fff;color:var(--placa)}
+.b-cerrar{background:#fff;color:var(--gris);border-color:var(--gris)}
+.panel-botones button:focus-visible{outline:4px solid var(--linea);outline-offset:3px}
+.aviso-copia{margin-top:14px;background:#FFF6DE;border-left:6px solid var(--linea);
+  padding:11px 15px;font-size:15.5px}
+.aviso-copia[hidden]{display:none}
+
+@media (max-width:760px){
+  :root{--rail:0px}
+  .ruta{left:0;right:0;top:0;bottom:auto;width:auto;height:10px}
+  .ruta-avance{top:0;left:0;transform:none;height:10px;width:0;transition:width .45s ease}
+  .ruta-num{display:none}
+  .mazo{margin-left:0}
+  .lamina{padding:30px 18px 96px;justify-content:flex-start}
+  .preparar{left:12px}
+  body{font-size:18px;overflow:auto}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="ruta" aria-hidden="true">
+  <div class="ruta-avance" id="avance"></div>
+  <p class="ruta-num" id="contador"></p>
+</div>
+
+<main class="mazo" id="mazo">
+
+  <section class="lamina activa" aria-label="Portada">
+    <p class="placa" id="placaCurso">Direcciones en el campus</p>
+    <h1>Hoy usted es el GPS</h1>
+    <p class="gloss">Todo desde su asiento, con el mapa del campus en el tel&eacute;fono.</p>
+    <p class="nota">Punto de partida: la puerta principal de <b class="edificio"></b>. Todas las rutas salen de ah&iacute;.</p>
+  </section>
+
+  <section class="lamina" aria-label="El plan de hoy">
+    <p class="placa">La ruta de hoy &middot; 50 min</p>
+    <h2>Cuatro paradas</h2>
+    <ol class="tareas">
+      <li><b>La entrevista</b> &mdash; en grupos, hablamos del coche.</li>
+      <li><b>Rutas cortas</b> &mdash; practicamos en parejas con el mapa.</li>
+      <li><b>Adivine el destino</b> &mdash; el juego, en grupos de cuatro.</li>
+      <li><b>Boleto de salida</b> &mdash; t&uacute; y usted, lado a lado.</li>
+    </ol>
+  </section>
+
+  <section class="lamina" aria-label="Actividad 1">
+    <p class="placa">Actividad 1 &middot; 10 min</p>
+    <h2>La entrevista</h2>
+    <p class="gloss">En grupos de cuatro, sin moverse de su sitio. Cada persona hace las seis preguntas a su grupo, con <b>t&uacute;</b>. Escriba qui&eacute;n dice que s&iacute; y un detalle m&aacute;s.</p>
+    <ol class="tareas">
+      <li>&iquest;Tienes la licencia de manejar?</li>
+      <li>&iquest;Manejas un coche h&iacute;brido, el&eacute;ctrico o todoterreno?</li>
+      <li>&iquest;Sabes revisar el aceite de un coche?</li>
+      <li>&iquest;Has tenido una llanta desinflada?</li>
+      <li>&iquest;Estacionas en el campus casi todos los d&iacute;as?</li>
+      <li>&iquest;Prefieres caminar, ir en bicicleta o usar el autob&uacute;s?</li>
+    </ol>
+    <p class="nota"><b>Al final:</b> cada grupo cuenta a la clase el dato m&aacute;s interesante que encontr&oacute;.</p>
+  </section>
+
+  <section class="lamina" aria-label="Caja de herramientas">
+    <p class="placa">Caja de herramientas</p>
+    <h2>Para dar direcciones</h2>
+    <p class="gloss">Est&aacute;n tambi&eacute;n en su hoja de papel. Las va a necesitar en todo lo dem&aacute;s.</p>
+    <div class="frases">
+      <div><b>doblar</b><span>to turn</span></div>
+      <div><b>seguir (sigo)</b><span>to keep on going</span></div>
+      <div><b>a la derecha</b><span>to the right</span></div>
+      <div><b>a la izquierda</b><span>to the left</span></div>
+      <div><b>(todo) derecho, recto</b><span>straight ahead</span></div>
+      <div><b>por</b><span>along, through</span></div>
+      <div><b>hasta</b><span>as far as, until you reach</span></div>
+      <div><b>cruzar</b><span>to cross</span></div>
+      <div><b>quedar</b><span>to be located</span></div>
+      <div><b>enfrente de</b><span>across from, facing</span></div>
+      <div><b>al lado de</b><span>next to</span></div>
+      <div><b>entre &hellip; y &hellip;</b><span>between &hellip; and &hellip;</span></div>
+      <div><b>detr&aacute;s de</b><span>behind</span></div>
+      <div><b>&iquest;C&oacute;mo se llega a&hellip;?</b><span>How do you get to&hellip;?</span></div>
+    </div>
+  </section>
+
+  <section class="lamina" aria-label="El mapa">
+    <p class="placa">El mapa &middot; saque el tel&eacute;fono</p>
+    <h2>El mapa en la mano</h2>
+    <p class="gloss">Abra el mapa interactivo del campus y busque <b class="edificio"></b>. D&eacute;jelo en el centro de la pantalla: su <b>puerta principal</b> es el punto de partida de todas las rutas de hoy.</p>
+    <div class="mapa-fila">
+      <div class="qr" id="cajaQR"></div>
+      <div>
+        <p class="enlace" id="enlaceMapa"></p>
+        <p class="gloss" style="margin-top:.3em">Escanee el c&oacute;digo con la c&aacute;mara del tel&eacute;fono.</p>
+      </div>
+    </div>
+    <p class="nota"><b>Una regla:</b> el mapa sirve para <i>mirar</i> el campus, no para pedir la ruta. Hoy el GPS es usted, no el tel&eacute;fono.</p>
+  </section>
+
+  <section class="lamina" aria-label="Actividad 2">
+    <p class="placa">Actividad 2 &middot; 10 min</p>
+    <h2>Rutas cortas</h2>
+    <p class="gloss">En parejas, para calentar. Una persona elige un lugar del mapa y dice c&oacute;mo llegar desde la puerta de <b class="edificio"></b>, sin decir el nombre. La otra lo sigue en el mapa y dice ad&oacute;nde lleg&oacute;. Tres rondas cada uno.</p>
+    <p class="nota">Si su compa&ntilde;ero se pierde, la ruta no estaba clara. D&iacute;gala otra vez con otras palabras.</p>
+  </section>
+
+  <section class="lamina" aria-label="Reglas del juego">
+    <p class="placa">Actividad 3 &middot; 22 min</p>
+    <h2>Adivine el destino</h2>
+    <p class="gloss">En grupos de cuatro: dos parejas, dos lugares. Nadie se levanta.</p>
+    <div class="reglas">
+      <div class="regla">
+        <h3>1 &middot; Cada pareja, un lugar</h3>
+        <p>Le doy a cada pareja una tarjeta con un lugar secreto. La otra pareja del grupo no la ve.</p>
+      </div>
+      <div class="regla">
+        <h3>2 &middot; La ruta</h3>
+        <p>Busquen en el mapa c&oacute;mo llegar desde la puerta de <b class="edificio"></b>. Escriban cuatro instrucciones. Prohibido decir el nombre.</p>
+      </div>
+      <div class="regla">
+        <h3>3 &middot; La otra pareja sigue</h3>
+        <p>L&eacute;anles la ruta. Ellos la siguen en el mapa y dicen ad&oacute;nde llegaron.</p>
+      </div>
+      <div class="regla">
+        <h3>4 &middot; Y la describen</h3>
+        <p>Antes de confirmar, la pareja que adivin&oacute; describe el lugar: qu&eacute; hay al lado, de qu&eacute; color es, qu&eacute; tiene.</p>
+      </div>
+    </div>
+    <p class="nota">Despu&eacute;s cambian: la otra pareja da su ruta.</p>
+  </section>
+
+  <section class="lamina" aria-label="Describir el lugar">
+    <p class="placa">Al llegar</p>
+    <h2>&iquest;Y qu&eacute; hay all&iacute;?</h2>
+    <p class="gloss">Adivinar el nombre no basta. La pareja que llega tiene que describir el lugar con dos o tres oraciones. Aqu&iacute; vuelven <b>ser</b> y <b>estar</b> del mi&eacute;rcoles.</p>
+    <ul class="preguntas">
+      <li><b>&iquest;Lo conoce usted?</b> &mdash; S&iacute;, tengo clase all&iacute; los martes.</li>
+      <li><b>&iquest;D&oacute;nde est&aacute;?</b> &mdash; Est&aacute; al lado de la biblioteca, enfrente del parque.</li>
+      <li><b>&iquest;C&oacute;mo es?</b> &mdash; Es un edificio viejo y muy bello.</li>
+      <li><b>&iquest;De qu&eacute; color es?</b> &mdash; Es de ladrillo rojo, con ventanas blancas.</li>
+      <li><b>&iquest;Qu&eacute; tiene?</b> &mdash; Tiene tres pisos y muchos &aacute;rboles enfrente.</li>
+    </ul>
+  </section>
+
+  <section class="lamina" aria-label="Ronda 1">
+    <p class="placa">Ronda 1</p>
+    <h2>Para un compa&ntilde;ero</h2>
+    <p class="gloss">La primera pareja escribe su ruta. El lector es un estudiante de su edad, as&iacute; que los mandatos van en <b>t&uacute;</b>.</p>
+    <div class="contraste">
+      <div class="col tu">
+        <h3>T&uacute;</h3>
+        <p class="quien">un compa&ntilde;ero de clase</p>
+        <p class="ej">Sal de <span class="edificio"></span> por la puerta principal y dobla a la derecha. Sigue derecho hasta el Quad.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="lamina" aria-label="Ronda 2">
+    <p class="placa">Ronda 2</p>
+    <h2>Para una visita</h2>
+    <p class="gloss">Ahora le toca a la otra pareja. Su lector es la madre de un estudiante, que no conoce el campus: todos los mandatos van en <b>usted</b>.</p>
+    <div class="contraste">
+      <div class="col tu">
+        <h3>T&uacute;</h3>
+        <p class="quien">un compa&ntilde;ero de clase</p>
+        <p class="ej">Sal &middot; Dobla &middot; Sigue &middot; Cruza &middot; Ve</p>
+      </div>
+      <div class="col ud">
+        <h3>Usted</h3>
+        <p class="quien">la madre de un estudiante</p>
+        <p class="ej">Salga &middot; Doble &middot; Siga &middot; Cruce &middot; Vaya</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="lamina" aria-label="Ronda final">
+    <p class="placa">Ronda final &middot; 6 min</p>
+    <h2>La ruta m&aacute;s dif&iacute;cil</h2>
+    <p class="gloss">Dos o tres grupos leen su mejor ruta a toda la clase. Todos la siguen en el mapa y adivinan. Gana el grupo que nadie adivina con una ruta que s&iacute; llegaba.</p>
+    <ul class="destinos" id="listaDestinos"></ul>
+  </section>
+
+  <section class="lamina" aria-label="Boleto de salida">
+    <p class="placa">Boleto de salida &middot; 4 min</p>
+    <h2>Antes de salir</h2>
+    <p class="gloss">En su hoja, con su nombre. D&eacute;jela en mi mano al salir. Hoy sale usted de verdad de este edificio: dele las instrucciones a alguien que no sabe ad&oacute;nde va.</p>
+    <ol class="tareas">
+      <li>&iquest;C&oacute;mo se llega de aqu&iacute; a su <b>pr&oacute;xima clase</b>? Dos instrucciones, con <b>t&uacute;</b>.</li>
+      <li>&iquest;C&oacute;mo se llega al <b>estacionamiento</b> o a la <b>parada del autob&uacute;s</b>? Dos instrucciones, con <b>usted</b>.</li>
+      <li>Una oraci&oacute;n que describa ese lugar: d&oacute;nde est&aacute; y c&oacute;mo es.</li>
+    </ol>
+    <p class="nota">Si usted se va a casa caminando, escriba la ruta hasta la salida del campus.</p>
+  </section>
+
+</main>
+
+<div class="pie">
+  <button class="preparar" type="button" id="abrirPanel">Preparar la clase</button>
+  <a href="guia.html" id="aGuia">Hoja y tarjetas</a>
+  <a href="vocabulario.html" id="aVocab">Vocabulario</a>
+</div>
+<nav class="nav" aria-label="Navegaci&oacute;n">
+  <button type="button" id="atras">Atr&aacute;s</button>
+  <button type="button" id="siguiente">Siguiente</button>
+</nav>
+
+<div class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="tituloPanel">
+  <div class="panel-caja">
+    <h2 id="tituloPanel">Preparar la clase</h2>
+    <p class="intro">Cambie estas tres cosas y la actividad queda lista para su campus. No hace falta editar ning&uacute;n archivo.</p>
+
+    <div class="campo">
+      <label for="fSalon">El punto de partida</label>
+      <span class="ayuda">Todas las rutas empiezan aqu&iacute;. Escoja un lugar con <b>una sola entrada principal</b>, como la biblioteca. Un edificio con varias salidas hace que la misma ruta tenga varias respuestas.</span>
+      <input type="text" id="fSalon" autocomplete="off" placeholder="Middleton Library">
+    </div>
+
+    <div class="campo">
+      <label for="fMapa">El mapa interactivo de su campus</label>
+      <span class="ayuda">Busque en internet el nombre de su universidad y las palabras &laquo;interactive campus map&raquo;, y copie aqu&iacute; la direcci&oacute;n. Si su campus no tiene mapa, borre este campo y la actividad funciona igual.</span>
+      <input type="text" id="fMapa" autocomplete="off" placeholder="https://&hellip;">
+    </div>
+
+    <div class="campo">
+      <label for="fLugares">Los lugares del juego</label>
+      <span class="ayuda">Uno por l&iacute;nea. Escriba el nombre, y despu&eacute;s de una raya vertical las tres palabras que los estudiantes no pueden usar. Ejemplo: Memorial Tower | torre, campanario, reloj</span>
+      <textarea id="fLugares" spellcheck="false"></textarea>
+    </div>
+
+    <div class="panel-botones">
+      <button type="button" class="b-primario" id="bGuardar">Guardar y empezar</button>
+      <button type="button" class="b-secundario" id="bCopiar">Copiar enlace para un colega</button>
+      <button type="button" class="b-cerrar" id="bCerrar">Cerrar</button>
+    </div>
+    <p class="aviso-copia" id="avisoCopia" hidden></p>
+  </div>
+</div>
+
+<script>
+(function(){
+  var PREDET = {
+    salon: "Middleton Library",
+    mapa: "https://map.concept3d.com/?id=743",
+    lugares: [
+      "Memorial Tower | torre, campanario, reloj",
+      "Indian Mounds | mont\u00edculos, ind\u00edgenas, hierba",
+      "El Parade Ground | c\u00e9sped, campo, abierto",
+      "El Quad | centro, patio, robles",
+      "Hill Memorial Library | archivo, columnas, blanco",
+      "Allen Hall | murales, ingl\u00e9s, pintura",
+      "El centro estudiantil (Tiger Lair) | uni\u00f3n, comida, tienda",
+      "Hodges Hall | lenguas, oficinas, espa\u00f1ol",
+      "El Field House | piscina, hist\u00f3rico, deportes",
+      "El Greek Theatre | teatro, anfiteatro, escalones",
+      "Tiger Stadium | estadio, f\u00fatbol, s\u00e1bado",
+      "El UREC | gimnasio, ejercicio, pesas"
+    ].join("\n")
+  };
+
+  var CLAVE = "gps-config";
+  var cfg = Object.assign({}, PREDET);
+
+  function desdeHash(){
+    try{
+      var h = location.hash.replace(/^#c=/, "");
+      if(!h) return null;
+      return JSON.parse(decodeURIComponent(escape(atob(h))));
+    }catch(e){ return null; }
+  }
+  function aHash(c){
+    return "#c=" + btoa(unescape(encodeURIComponent(JSON.stringify(c))));
+  }
+  function cargar(){
+    var h = desdeHash();
+    if(h){ cfg = Object.assign({}, PREDET, h); return; }
+    try{
+      var g = localStorage.getItem(CLAVE);
+      if(g) cfg = Object.assign({}, PREDET, JSON.parse(g));
+    }catch(e){}
+  }
+
+  function partirLugares(txt){
+    return (txt||"").split("\n").map(function(l){ return l.trim(); }).filter(Boolean)
+      .map(function(l){
+        var p = l.split("|");
+        return { nombre: p[0].trim(), prohibidas: (p[1]||"").trim() };
+      });
+  }
+
+  function aplicar(){
+    [].forEach.call(document.querySelectorAll(".edificio"), function(el){
+      el.textContent = cfg.salon || "nuestro sal\u00f3n";
+    });
+    var e = document.getElementById("enlaceMapa"), caja = document.getElementById("cajaQR");
+    e.textContent = cfg.mapa ? cfg.mapa.replace(/^https?:\/\//, "") : "";
+    e.hidden = !cfg.mapa;
+    caja.innerHTML = "";
+    caja.hidden = true;
+    if (cfg.mapa && window.QR) {
+      try { caja.innerHTML = QR.svg(cfg.mapa, "C\u00f3digo QR del mapa del campus"); caja.hidden = false; }
+      catch (err) { caja.hidden = true; }
+    }
+
+    var lista = document.getElementById("listaDestinos");
+    lista.innerHTML = "";
+    partirLugares(cfg.lugares).forEach(function(l){
+      var li = document.createElement("li"); li.textContent = l.nombre; lista.appendChild(li);
+    });
+  }
+
+  /* ---------- panel ---------- */
+  var panel = document.getElementById("panel");
+  var fS = document.getElementById("fSalon"), fM = document.getElementById("fMapa"),
+      fL = document.getElementById("fLugares"), aviso = document.getElementById("avisoCopia");
+
+  function abrir(){
+    fS.value = cfg.salon || ""; fM.value = cfg.mapa || ""; fL.value = cfg.lugares || "";
+    aviso.hidden = true; panel.setAttribute("open",""); fS.focus();
+  }
+  function cerrar(){ panel.removeAttribute("open"); document.getElementById("abrirPanel").focus(); }
+
+  document.getElementById("abrirPanel").addEventListener("click", abrir);
+  document.getElementById("bCerrar").addEventListener("click", cerrar);
+  panel.addEventListener("click", function(e){ if(e.target === panel) cerrar(); });
+
+  document.getElementById("bGuardar").addEventListener("click", function(){
+    cfg = { salon: fS.value.trim(), mapa: fM.value.trim(), lugares: fL.value };
+    try{ localStorage.setItem(CLAVE, JSON.stringify(cfg)); }catch(e){}
+    history.replaceState(null, "", location.pathname + location.search);
+    aplicar(); cerrar(); mostrar(0);
+  });
+
+  document.getElementById("bCopiar").addEventListener("click", function(){
+    var c = { salon: fS.value.trim(), mapa: fM.value.trim(), lugares: fL.value };
+    var url = location.origin + location.pathname + aHash(c);
+    function ok(){
+      aviso.hidden = false;
+      aviso.textContent = "Enlace copiado. Se lo puede mandar a un colega por correo: al abrirlo, la actividad ya sale con este sal\u00f3n, este mapa y estos lugares.";
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(ok, function(){
+        aviso.hidden = false; aviso.textContent = "Copie este enlace a mano: " + url;
+      });
+    } else {
+      aviso.hidden = false; aviso.textContent = "Copie este enlace a mano: " + url;
+    }
+  });
+
+  /* ---------- láminas ---------- */
+  var laminas = [].slice.call(document.querySelectorAll(".lamina"));
+  var avance = document.getElementById("avance"), contador = document.getElementById("contador");
+  var i = 0;
+  function mostrar(n){
+    i = Math.max(0, Math.min(laminas.length-1, n));
+    laminas.forEach(function(l,k){
+      var act = (k === i);
+      l.classList.toggle("activa", act);
+      l.setAttribute("aria-hidden", String(!act));
+    });
+    var pct = ((i+1)/laminas.length*100) + "%";
+    if(window.matchMedia("(max-width:760px)").matches){ avance.style.width = pct; avance.style.height = "10px"; }
+    else { avance.style.height = pct; avance.style.width = "12px"; }
+    contador.textContent = (i+1) + " / " + laminas.length;
+    document.querySelector(".mazo").scrollTop = 0;
+  }
+  document.getElementById("siguiente").addEventListener("click", function(){ mostrar(i+1); });
+  document.getElementById("atras").addEventListener("click", function(){ mostrar(i-1); });
+
+  document.addEventListener("keydown", function(e){
+    if(panel.hasAttribute("open")){ if(e.key === "Escape") cerrar(); return; }
+    if(e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+    if(e.target.tagName === "BUTTON" && (e.key === " " || e.key === "Enter")) return;
+    if(e.key === "ArrowRight" || e.key === "PageDown" || e.key === " "){ e.preventDefault(); mostrar(i+1); }
+    if(e.key === "ArrowLeft" || e.key === "PageUp"){ e.preventDefault(); mostrar(i-1); }
+    if(e.key === "Home") mostrar(0);
+    if(e.key === "End") mostrar(laminas.length-1);
+  });
+
+  var x0 = null;
+  document.addEventListener("touchstart", function(e){
+    if(panel.hasAttribute("open")) return; x0 = e.changedTouches[0].clientX; }, {passive:true});
+  document.addEventListener("touchend", function(e){
+    if(x0 === null) return;
+    var d = e.changedTouches[0].clientX - x0;
+    if(Math.abs(d) > 60) mostrar(d < 0 ? i+1 : i-1);
+    x0 = null;
+  }, {passive:true});
+
+  window.addEventListener("resize", function(){ mostrar(i); });
+
+  /* los enlaces a las otras dos páginas llevan la configuración actual */
+  function enlazar(){
+    var h = aHash(cfg);
+    document.getElementById("aGuia").href = "guia.html" + h;
+    document.getElementById("aVocab").href = "vocabulario.html";
+  }
+  var _aplicar = aplicar;
+  aplicar = function(){ _aplicar(); enlazar(); };
+
+  cargar(); aplicar(); mostrar(0);
+})();
+</script>
+</body>
+</html>

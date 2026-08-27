@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hoy usted es el GPS &middot; Hoja y tarjetas</title>
+<script>
+/* Generador de códigos QR — modo byte, corrección de errores M, versiones 1 a 10.
+   Se usa para dibujar el código del mapa que escriba cada profesor.
+   Uso: QR.svg("https://ejemplo.com", "Texto alternativo") -> cadena SVG. */
+(function (global) {
+  "use strict";
+
+  /* --- tablas por versión (nivel M) --- */
+  var CAP = [0, 14, 26, 42, 62, 84, 106, 122, 152, 180, 213];
+  var TOTAL = [0, 26, 44, 70, 100, 134, 172, 196, 242, 292, 346];
+  var ECPB = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26];
+  /* bloques: [[cantidad, datos por bloque], ...] */
+  var BLOQUES = [
+    null,
+    [[1, 16]], [[1, 28]], [[1, 44]], [[2, 32]], [[2, 43]],
+    [[4, 27]], [[4, 31]], [[2, 38], [2, 39]], [[3, 36], [2, 37]], [[4, 43], [1, 44]]
+  ];
+  var ALIN = [
+    null, [], [6, 18], [6, 22], [6, 26], [6, 30],
+    [6, 34], [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]
+  ];
+
+  /* --- aritmética en GF(256) --- */
+  var EXP = new Array(512), LOG = new Array(256);
+  (function () {
+    var x = 1;
+    for (var i = 0; i < 255; i++) {
+      EXP[i] = x; LOG[x] = i;
+      x <<= 1;
+      if (x & 0x100) x ^= 0x11d;
+    }
+    for (var j = 255; j < 512; j++) EXP[j] = EXP[j - 255];
+  })();
+
+  function mul(a, b) { return (a === 0 || b === 0) ? 0 : EXP[LOG[a] + LOG[b]]; }
+
+  function polGen(grado) {
+    var p = [1];
+    for (var i = 0; i < grado; i++) {
+      var n = new Array(p.length + 1).fill(0);
+      for (var j = 0; j < p.length; j++) {
+        n[j] ^= p[j];
+        n[j + 1] ^= mul(p[j], EXP[i]);
+      }
+      p = n;
+    }
+    return p;
+  }
+
+  function ecc(datos, n) {
+    var g = polGen(n), r = datos.concat(new Array(n).fill(0));
+    for (var i = 0; i < datos.length; i++) {
+      var c = r[i];
+      if (c === 0) continue;
+      for (var j = 0; j < g.length; j++) r[i + j] ^= mul(g[j], c);
+    }
+    return r.slice(datos.length);
+  }
+
+  /* --- texto a bytes UTF-8 --- */
+  function bytes(txt) {
+    var s = unescape(encodeURIComponent(txt)), a = [];
+    for (var i = 0; i < s.length; i++) a.push(s.charCodeAt(i));
+    return a;
+  }
+
+  function codificar(txt) {
+    var dat = bytes(txt), v = 0;
+    for (var k = 1; k <= 10; k++) if (dat.length <= CAP[k]) { v = k; break; }
+    if (!v) throw new Error("El texto es demasiado largo para un código QR de versión 10.");
+
+    var bits = [];
+    function put(val, n) { for (var i = n - 1; i >= 0; i--) bits.push((val >> i) & 1); }
+
+    put(4, 4);
+    put(dat.length, v < 10 ? 8 : 16);
+    for (var i = 0; i < dat.length; i++) put(dat[i], 8);
+
+    var totalDatos = TOTAL[v] - ECPB[v] * BLOQUES[v].reduce(function (s, b) { return s + b[0]; }, 0);
+    var cap = totalDatos * 8;
+    for (var t = 0; t < 4 && bits.length < cap; t++) bits.push(0);
+    while (bits.length % 8) bits.push(0);
+
+    var cw = [];
+    for (var b = 0; b < bits.length; b += 8) {
+      var x = 0;
+      for (var q = 0; q < 8; q++) x = (x << 1) | bits[b + q];
+      cw.push(x);
+    }
+    var relleno = [0xec, 0x11], r = 0;
+    while (cw.length < totalDatos) cw.push(relleno[r++ % 2]);
+
+    /* repartir en bloques y calcular corrección */
+    var bloquesD = [], bloquesE = [], pos = 0;
+    BLOQUES[v].forEach(function (par) {
+      for (var i = 0; i < par[0]; i++) {
+        var d = cw.slice(pos, pos + par[1]);
+        pos += par[1];
+        bloquesD.push(d);
+        bloquesE.push(ecc(d, ECPB[v]));
+      }
+    });
+
+    /* intercalar */
+    var salida = [], maxD = Math.max.apply(null, bloquesD.map(function (d) { return d.length; }));
+    for (var c = 0; c < maxD; c++)
+      for (var bi = 0; bi < bloquesD.length; bi++)
+        if (c < bloquesD[bi].length) salida.push(bloquesD[bi][c]);
+    for (var e = 0; e < ECPB[v]; e++)
+      for (var bj = 0; bj < bloquesE.length; bj++) salida.push(bloquesE[bj][e]);
+
+    return { v: v, cw: salida };
+  }
+
+  /* --- matriz --- */
+  function matriz(v, cw) {
+    var n = v * 4 + 17;
+    var m = [], res = [];
+    for (var i = 0; i < n; i++) { m.push(new Array(n).fill(0)); res.push(new Array(n).fill(false)); }
+
+    function buscador(fr, fc) {
+      for (var r = -1; r <= 7; r++) for (var c = -1; c <= 7; c++) {
+        var y = fr + r, x = fc + c;
+        if (y < 0 || y >= n || x < 0 || x >= n) continue;
+        var dentro = (r >= 0 && r <= 6 && (c === 0 || c === 6)) ||
+                     (c >= 0 && c <= 6 && (r === 0 || r === 6)) ||
+                     (r >= 2 && r <= 4 && c >= 2 && c <= 4);
+        m[y][x] = dentro ? 1 : 0;
+        res[y][x] = true;
+      }
+    }
+    buscador(0, 0); buscador(0, n - 7); buscador(n - 7, 0);
+
+    for (var i2 = 8; i2 < n - 8; i2++) {
+      var b = (i2 % 2 === 0) ? 1 : 0;
+      m[6][i2] = b; res[6][i2] = true;
+      m[i2][6] = b; res[i2][6] = true;
+    }
+
+    var al = ALIN[v], u = al.length - 1;
+    for (var a = 0; a < al.length; a++) for (var b2 = 0; b2 < al.length; b2++) {
+      /* las tres esquinas coinciden con los buscadores y no se dibujan */
+      if ((a === 0 && b2 === 0) || (a === 0 && b2 === u) || (a === u && b2 === 0)) continue;
+      var ar = al[a], ac = al[b2];
+      for (var dr = -2; dr <= 2; dr++) for (var dc = -2; dc <= 2; dc++) {
+        m[ar + dr][ac + dc] = (Math.max(Math.abs(dr), Math.abs(dc)) !== 1) ? 1 : 0;
+        res[ar + dr][ac + dc] = true;
+      }
+    }
+
+    if (v >= 7) {
+      for (var vi = 0; vi < 6; vi++) for (var vj = 0; vj < 3; vj++) {
+        res[vi][n - 11 + vj] = true;
+        res[n - 11 + vj][vi] = true;
+      }
+    }
+
+    m[n - 8][8] = 1; res[n - 8][8] = true;
+    for (var f = 0; f < 9; f++) {
+      if (!res[8][f]) res[8][f] = true;
+      if (!res[f][8]) res[f][8] = true;
+    }
+    for (var g = 0; g < 8; g++) {
+      res[8][n - 1 - g] = true;
+      res[n - 1 - g][8] = true;
+    }
+
+    /* datos en zigzag */
+    var bits = [];
+    cw.forEach(function (x) { for (var i = 7; i >= 0; i--) bits.push((x >> i) & 1); });
+    var idx = 0, arriba = true;
+    for (var col = n - 1; col > 0; col -= 2) {
+      if (col === 6) col--;
+      for (var s = 0; s < n; s++) {
+        var fila = arriba ? (n - 1 - s) : s;
+        for (var k = 0; k < 2; k++) {
+          var cc = col - k;
+          if (res[fila][cc]) continue;
+          m[fila][cc] = (idx < bits.length) ? bits[idx] : 0;
+          idx++;
+        }
+      }
+      arriba = !arriba;
+    }
+
+    return { m: m, res: res, n: n };
+  }
+
+  function condicion(mk, r, c) {
+    switch (mk) {
+      case 0: return (r + c) % 2 === 0;
+      case 1: return r % 2 === 0;
+      case 2: return c % 3 === 0;
+      case 3: return (r + c) % 3 === 0;
+      case 4: return (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0;
+      case 5: return (r * c) % 2 + (r * c) % 3 === 0;
+      case 6: return ((r * c) % 2 + (r * c) % 3) % 2 === 0;
+      default: return ((r + c) % 2 + (r * c) % 3) % 2 === 0;
+    }
+  }
+
+  function formato(mk, m, n) {
+    var d = (0 << 3) | mk;             /* 00 = nivel M */
+    var v = d << 10;
+    for (var i = 4; i >= 0; i--) if ((v >> (i + 10)) & 1) v ^= 0x537 << i;
+    var f = ((d << 10) | v) ^ 0x5412;
+    for (var j = 0; j < 15; j++) {
+      var b = (f >> j) & 1;
+      /* copia 1: sube por la columna 8 y sigue por la fila 8 */
+      if (j < 6) m[j][8] = b;
+      else if (j === 6) m[7][8] = b;
+      else if (j === 7) m[8][8] = b;
+      else if (j === 8) m[8][7] = b;
+      else m[8][14 - j] = b;
+      /* copia 2: fila 8 a la derecha, columna 8 abajo */
+      if (j < 8) m[8][n - 1 - j] = b;
+      else m[n - 15 + j][8] = b;
+    }
+  }
+
+  /* información de versión — obligatoria a partir de la versión 7 */
+  function versionInfo(v, m, n) {
+    if (v < 7) return;
+    var r = v << 12;
+    for (var i = 5; i >= 0; i--) if ((r >> (i + 12)) & 1) r ^= 0x1f25 << i;
+    var d = (v << 12) | r;
+    for (var j = 0; j < 18; j++) {
+      var b = (d >> j) & 1, fila = Math.floor(j / 3), col = j % 3;
+      m[fila][n - 11 + col] = b;
+      m[n - 11 + col][fila] = b;
+    }
+  }
+
+  function penal(m, n) {
+    var p = 0, r, c, i;
+    for (r = 0; r < n; r++) for (c = 0; c < n; c++) {
+      if (c < n - 1 && r < n - 1 &&
+          m[r][c] === m[r][c + 1] && m[r][c] === m[r + 1][c] && m[r][c] === m[r + 1][c + 1]) p += 3;
+    }
+    for (r = 0; r < n; r++) {
+      var run = 1;
+      for (c = 1; c < n; c++) {
+        if (m[r][c] === m[r][c - 1]) { run++; } else { if (run >= 5) p += run - 2; run = 1; }
+      }
+      if (run >= 5) p += run - 2;
+    }
+    for (c = 0; c < n; c++) {
+      var run2 = 1;
+      for (r = 1; r < n; r++) {
+        if (m[r][c] === m[r - 1][c]) { run2++; } else { if (run2 >= 5) p += run2 - 2; run2 = 1; }
+      }
+      if (run2 >= 5) p += run2 - 2;
+    }
+    var osc = 0;
+    for (r = 0; r < n; r++) for (c = 0; c < n; c++) if (m[r][c]) osc++;
+    p += Math.floor(Math.abs(osc * 100 / (n * n) - 50) / 5) * 10;
+    return p;
+  }
+
+  function generar(txt) {
+    var e = codificar(txt);
+    var mejor = null, mejorP = Infinity;
+    for (var mk = 0; mk < 8; mk++) {
+      var b = matriz(e.v, e.cw);
+      for (var r = 0; r < b.n; r++) for (var c = 0; c < b.n; c++)
+        if (!b.res[r][c] && condicion(mk, r, c)) b.m[r][c] ^= 1;
+      formato(mk, b.m, b.n);
+      versionInfo(e.v, b.m, b.n);
+      var p = penal(b.m, b.n);
+      if (p < mejorP) { mejorP = p; mejor = b; }
+    }
+    return mejor.m;
+  }
+
+  function svg(txt, alt) {
+    var m = generar(txt), n = m.length, q = 2, t = n + q * 2, d = [];
+    for (var y = 0; y < n; y++) {
+      var x = 0;
+      while (x < n) {
+        if (m[y][x]) {
+          var x0 = x;
+          while (x < n && m[y][x]) x++;
+          d.push("M" + (x0 + q) + " " + (y + q) + "h" + (x - x0) + "v1h-" + (x - x0) + "z");
+        } else x++;
+      }
+    }
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + t + ' ' + t +
+      '" shape-rendering="crispEdges" role="img" aria-label="' +
+      String(alt || "Código QR").replace(/[<>&"]/g, "") + '">' +
+      '<rect width="' + t + '" height="' + t + '" fill="#fff"/>' +
+      '<path d="' + d.join("") + '" fill="#000"/></svg>';
+  }
+
+  global.QR = { svg: svg, matriz: generar };
+})(typeof globalThis !== "undefined" ? globalThis : this);
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Barlow:wght@700&display=swap" rel="stylesheet">
+<style>
+:root{--tinta:#000;--placa:#0E3268;--ambar:#6E4209;--linea:#E5A400;--gris:#3D4756;
+  --display:"Barlow",Arial,sans-serif;--body:"Atkinson Hyperlegible",Verdana,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--body);color:var(--tinta);background:#E7ECF3;padding:22px;
+  line-height:1.62;font-size:17px}
+.hoja{max-width:8.5in;margin:0 auto 22px;background:#fff;padding:.5in}
+.encabezado{border-bottom:4px solid #000;padding-bottom:10px;margin-bottom:16px}
+.encabezado h1{font-family:var(--display);font-size:29px;line-height:1.1}
+.encabezado p{font-family:var(--display);font-size:15px;color:var(--placa);margin-top:3px}
+h2{font-family:var(--display);font-size:22px;color:var(--placa);margin:24px 0 3px}
+.gloss{color:var(--gris);font-style:italic;font-size:14px;margin-bottom:11px}
+.identificacion{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;font-size:16px}
+.identificacion p{display:flex;align-items:baseline;gap:8px;flex:1;min-width:210px}
+.raya{flex:1;border-bottom:2px solid #000;height:17px}
+ul.limpia{list-style:none;padding:0}
+ul.limpia li{padding:5px 0;border-bottom:1px solid #B4BEcc;font-size:16px}
+ul.limpia b{color:var(--placa)}
+ul.limpia span{color:var(--gris);font-style:italic}
+.dos{columns:2;column-gap:30px}
+.dos li{break-inside:avoid;-webkit-column-break-inside:avoid}
+ol.lineas{list-style:none;counter-reset:l;padding:0}
+ol.lineas li{counter-increment:l;position:relative;padding:0 0 5px 32px;margin-bottom:15px;
+  border-bottom:2px solid #B4BEcc;min-height:32px;font-size:16px}
+ol.lineas li::before{content:counter(l);position:absolute;left:0;top:0;width:22px;height:22px;
+  display:grid;place-items:center;background:var(--placa);color:#fff;
+  font-family:var(--display);font-size:13px}
+.renglon{display:block;height:30px;border-bottom:2px solid #B4BEcc;margin-bottom:13px}
+.preguntas{list-style:none;padding:0;margin-top:4px}
+.preguntas li{border-left:6px solid var(--ambar);padding:4px 0 4px 12px;margin-bottom:9px;font-size:16px}
+.preguntas b{color:var(--ambar)}
+.tarjetas{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.tarjeta{border:2px dashed #6A7488;padding:16px 18px;min-height:2.05in;
+  display:flex;flex-direction:column;justify-content:center}
+.tarjeta .rotulo{font-family:var(--display);text-transform:uppercase;letter-spacing:.14em;
+  font-size:12px;color:var(--ambar);margin-bottom:5px}
+.tarjeta .destino{font-family:var(--display);font-size:26px;line-height:1.08}
+.tarjeta .prohibido{margin-top:10px;padding-top:8px;border-top:3px solid var(--linea);font-size:15px}
+.tarjeta .prohibido b{font-family:var(--display);font-size:12px;text-transform:uppercase;
+  letter-spacing:.1em;display:block;color:#000}
+.mapa{border:3px solid #000;padding:13px 16px;margin:14px 0 4px;
+  display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.mapa .qr{width:112px;flex-shrink:0}
+.mapa .qr svg{display:block;width:100%;height:auto}
+.mapa .qr[hidden]{display:none}
+.mapa > div:last-child{flex:1;min-width:230px}
+.url{font-family:var(--display);font-size:19px;color:var(--placa);word-break:break-all}
+.barraNav{max-width:8.5in;margin:0 auto 16px;display:flex;gap:8px;flex-wrap:wrap}
+.barraNav a{font-family:var(--display);font-weight:700;font-size:15px;background:#fff;
+  border:3px solid var(--placa);color:var(--placa);padding:.5em 1em;text-decoration:none}
+.barraNav a:hover{background:var(--placa);color:#fff}
+.barraNav a:focus-visible{outline:4px solid var(--linea);outline-offset:3px}
+.barraNav button{font-family:var(--display);font-weight:700;font-size:15px;
+  background:var(--placa);color:#fff;border:3px solid var(--placa);padding:.5em 1em;cursor:pointer}
+.barraNav button:hover{background:#0A2650;border-color:#0A2650}
+.barraNav button:focus-visible{outline:4px solid var(--linea);outline-offset:3px}
+
+@media print{.barraNav{display:none}}
+.aviso{background:#FFF6DE;border-left:6px solid var(--linea);padding:13px 17px;
+  font-size:15px;margin:0 auto 20px;max-width:8.5in}
+.aviso b{font-family:var(--display)}
+@media print{
+  body{background:#fff;padding:0;font-size:12pt}
+  .hoja{max-width:none;margin:0;padding:.45in;page-break-after:always}
+  .hoja:last-child{page-break-after:auto}
+  .aviso{display:none}
+}
+</style>
+</head>
+<body>
+
+<nav class="barraNav" aria-label="Las p&aacute;ginas de la clase">
+  <a href="./" id="aLam">L&aacute;minas de clase</a>
+  <a href="vocabulario.html">Vocabulario</a>
+  <button type="button" id="bImprimir">Imprimir la hoja y las tarjetas</button>
+</nav>
+
+<div class="aviso">
+  <b>Para imprimir:</b> Ctrl/Cmd + P. La p&aacute;gina 1 es la hoja del estudiante, una por persona. Las siguientes son las tarjetas: imprima y corte por la l&iacute;nea de puntos, una tarjeta por pareja. Los lugares y el mapa salen de lo que usted escribi&oacute; en <b>Preparar la clase</b>; si abre esta hoja desde el enlace que copi&oacute; all&iacute;, ya sale todo puesto. Este aviso no se imprime.
+</div>
+
+<section class="hoja">
+  <div class="encabezado">
+    <h1>Hoy usted es el GPS</h1>
+    <p>Direcciones en el campus</p>
+  </div>
+  <div class="identificacion">
+    <p>Nombre <span class="raya"></span></p>
+    <p>Punto de partida <span class="raya"></span></p>
+  </div>
+
+  <div class="mapa" id="bloqueMapa">
+    <div class="qr" id="cajaQR"></div>
+    <div>
+      <p><b>El mapa interactivo del campus.</b> Escanee el c&oacute;digo con la c&aacute;mara del tel&eacute;fono. &Uacute;selo para mirar el campus, no para pedir la ruta: hoy el GPS es usted.</p>
+      <p class="url" id="urlMapa"></p>
+    </div>
+  </div>
+
+  <h2>Para dar direcciones</h2>
+  <p class="gloss">Las palabras que va a necesitar hoy.</p>
+  <ul class="limpia dos">
+    <li><b>doblar</b> <span>to turn</span></li>
+    <li><b>seguir (sigo)</b> <span>to keep on going</span></li>
+    <li><b>a la derecha</b> <span>to the right</span></li>
+    <li><b>a la izquierda</b> <span>to the left</span></li>
+    <li><b>(todo) derecho, recto</b> <span>straight ahead</span></li>
+    <li><b>por</b> <span>along, through</span></li>
+    <li><b>hasta</b> <span>as far as, until you reach</span></li>
+    <li><b>cruzar</b> <span>to cross</span></li>
+    <li><b>quedar</b> <span>to be located</span></li>
+    <li><b>enfrente de</b> <span>across from, facing</span></li>
+    <li><b>al lado de</b> <span>next to</span></li>
+    <li><b>entre &hellip; y &hellip;</b> <span>between &hellip; and &hellip;</span></li>
+    <li><b>detr&aacute;s de</b> <span>behind</span></li>
+    <li><b>&iquest;C&oacute;mo se llega a&hellip;?</b> <span>How do you get to&hellip;?</span></li>
+  </ul>
+
+  <h2>Cuando su pareja llegue, descr&iacute;balo</h2>
+  <p class="gloss">Adivinar el nombre no basta. Conteste dos o tres de estas preguntas.</p>
+  <ul class="preguntas">
+    <li><b>&iquest;Lo conoce usted?</b> S&iacute;, tengo clase all&iacute; los martes.</li>
+    <li><b>&iquest;D&oacute;nde est&aacute;?</b> Est&aacute; al lado de la biblioteca, enfrente del parque.</li>
+    <li><b>&iquest;C&oacute;mo es?</b> Es un edificio viejo y muy bello.</li>
+    <li><b>&iquest;De qu&eacute; color es?</b> Es de ladrillo rojo, con ventanas blancas.</li>
+    <li><b>&iquest;Qu&eacute; tiene?</b> Tiene tres pisos y muchos &aacute;rboles enfrente.</li>
+  </ul>
+</section>
+
+<section class="hoja">
+  <div class="encabezado">
+    <h1>Su trabajo de hoy</h1>
+    <p>Escriba aqu&iacute; o en su cuaderno, como prefiera.</p>
+  </div>
+
+  <h2>1 &middot; La entrevista</h2>
+  <p class="gloss">En su grupo, pregunte con t&uacute;. Escriba qui&eacute;n dice que s&iacute; y un detalle m&aacute;s.</p>
+  <ol class="lineas">
+    <li>&iquest;Tienes la licencia de manejar?</li>
+    <li>&iquest;Manejas un coche h&iacute;brido, el&eacute;ctrico o todoterreno?</li>
+    <li>&iquest;Sabes revisar el aceite de un coche?</li>
+    <li>&iquest;Has tenido una llanta desinflada?</li>
+    <li>&iquest;Estacionas en el campus casi todos los d&iacute;as?</li>
+    <li>&iquest;Prefieres caminar, ir en bicicleta o usar el autob&uacute;s?</li>
+  </ol>
+
+  <h2>2 &middot; Nuestra ruta &mdash; con t&uacute; o con usted</h2>
+  <p class="gloss">Cuatro instrucciones desde la puerta principal del punto de partida. No escriba el nombre del lugar.</p>
+  <span class="renglon"></span><span class="renglon"></span>
+  <span class="renglon"></span><span class="renglon"></span>
+
+  <h2>3 &middot; El lugar de la otra pareja</h2>
+  <p class="gloss">&iquest;Ad&oacute;nde llegaron? Escriba el nombre y dos oraciones que lo describan.</p>
+  <span class="renglon"></span><span class="renglon"></span>
+  <span class="renglon"></span>
+
+  <h2>4 &middot; Boleto de salida</h2>
+  <p class="gloss">Ahora sale usted de verdad. Escriba para alguien que no sabe ad&oacute;nde va.</p>
+  <ol class="lineas">
+    <li>&iquest;C&oacute;mo se llega de aqu&iacute; a su pr&oacute;xima clase? Dos instrucciones, con t&uacute;.</li>
+    <li>&iquest;C&oacute;mo se llega al estacionamiento o a la parada del autob&uacute;s? Dos instrucciones, con usted.</li>
+    <li>Una oraci&oacute;n que describa ese lugar: d&oacute;nde est&aacute; y c&oacute;mo es.</li>
+  </ol>
+</section>
+
+<div id="paginasTarjetas"></div>
+
+<script>
+(function(){
+  var PREDET = {
+    salon: "Middleton Library",
+    mapa: "https://map.concept3d.com/?id=743",
+    lugares: [
+      "Memorial Tower | torre, campanario, reloj",
+      "Indian Mounds | mont\u00edculos, ind\u00edgenas, hierba",
+      "El Parade Ground | c\u00e9sped, campo, abierto",
+      "El Quad | centro, patio, robles",
+      "Hill Memorial Library | archivo, columnas, blanco",
+      "Allen Hall | murales, ingl\u00e9s, pintura",
+      "El centro estudiantil (Tiger Lair) | uni\u00f3n, comida, tienda",
+      "Hodges Hall | lenguas, oficinas, espa\u00f1ol",
+      "El Field House | piscina, hist\u00f3rico, deportes",
+      "El Greek Theatre | teatro, anfiteatro, escalones",
+      "Tiger Stadium | estadio, f\u00fatbol, s\u00e1bado",
+      "El UREC | gimnasio, ejercicio, pesas"
+    ].join("\n")
+  };
+  var cfg = Object.assign({}, PREDET);
+  try{
+    var h = location.hash.replace(/^#c=/, "");
+    if(h) cfg = Object.assign({}, PREDET, JSON.parse(decodeURIComponent(escape(atob(h)))));
+    else {
+      var g = localStorage.getItem("gps-config");
+      if(g) cfg = Object.assign({}, PREDET, JSON.parse(g));
+    }
+  }catch(e){}
+
+  try{
+    var hh = location.hash;
+    if(hh && hh.indexOf("#c=") === 0) document.getElementById("aLam").href = "./" + hh;
+  }catch(e){}
+
+  document.getElementById("bImprimir").addEventListener("click", function(){ window.print(); });
+
+  var bloque = document.getElementById("bloqueMapa");
+  if(cfg.mapa){
+    document.getElementById("urlMapa").textContent = cfg.mapa.replace(/^https?:\/\//,"");
+    var caja = document.getElementById("cajaQR");
+    if(window.QR){
+      try { caja.innerHTML = QR.svg(cfg.mapa, "C\u00f3digo QR del mapa del campus"); }
+      catch(err){ caja.hidden = true; }
+    } else { caja.hidden = true; }
+  } else { bloque.hidden = true; }
+
+  var lugares = (cfg.lugares||"").split("\n").map(function(l){ return l.trim(); }).filter(Boolean)
+    .map(function(l){ var p = l.split("|");
+      return { nombre: p[0].trim(), prohibidas: (p[1]||"").trim() }; });
+
+  var cont = document.getElementById("paginasTarjetas");
+  for(var i = 0; i < lugares.length; i += 8){
+    var grupo = lugares.slice(i, i+8);
+    var sec = document.createElement("section");
+    sec.className = "hoja";
+    var enc = document.createElement("div");
+    enc.className = "encabezado";
+    var h1 = document.createElement("h1");
+    h1.textContent = "Tarjetas de lugar \u00b7 " + (Math.floor(i/8)+1);
+    var p = document.createElement("p");
+    p.textContent = "Corte por la l\u00ednea \u00b7 Una tarjeta por pareja \u00b7 No la ense\u00f1e a la otra pareja";
+    enc.appendChild(h1); enc.appendChild(p); sec.appendChild(enc);
+    var caja = document.createElement("div"); caja.className = "tarjetas";
+    grupo.forEach(function(l){
+      var t = document.createElement("div"); t.className = "tarjeta";
+      var r = document.createElement("p"); r.className = "rotulo"; r.textContent = "Lugar secreto";
+      var d = document.createElement("p"); d.className = "destino"; d.textContent = l.nombre;
+      t.appendChild(r); t.appendChild(d);
+      if(l.prohibidas){
+        var pr = document.createElement("p"); pr.className = "prohibido";
+        var b = document.createElement("b"); b.textContent = "Palabras prohibidas";
+        pr.appendChild(b); pr.appendChild(document.createTextNode(l.prohibidas));
+        t.appendChild(pr);
+      }
+      caja.appendChild(t);
+    });
+    sec.appendChild(caja); cont.appendChild(sec);
+  }
+})();
+</script>
+</body>
+</html>

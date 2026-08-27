@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPAN 2102 &middot; Vocabulario &middot; Cap&iacute;tulo 15</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Barlow:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --tinta:#14181F;--placa:#123A73;--ambar:#7A4A0E;--linea:#E5A400;--gris:#4A5464;--fondo:#EDF1F6;
+  --display:"Barlow",Arial,sans-serif;--body:"Atkinson Hyperlegible",Verdana,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--body);color:var(--tinta);background:var(--fondo);
+  line-height:1.6;font-size:18px;padding:20px}
+.envoltura{max-width:960px;margin:0 auto}
+.barraNav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.barraNav a{font-family:var(--display);font-weight:700;font-size:15px;background:#fff;
+  border:3px solid var(--placa);color:var(--placa);padding:.5em 1em;text-decoration:none}
+.barraNav a:hover{background:var(--placa);color:#fff}
+.barraNav a:focus-visible{outline:4px solid var(--linea);outline-offset:3px}
+.barraNav button{font-family:var(--display);font-weight:700;font-size:15px;
+  background:var(--placa);color:#fff;border:3px solid var(--placa);padding:.5em 1em;cursor:pointer}
+.barraNav button:hover{background:#0A2650;border-color:#0A2650}
+.barraNav button:focus-visible{outline:4px solid var(--linea);outline-offset:3px}
+
+@media print{.barraNav{display:none}}
+header{border-bottom:4px solid var(--tinta);padding-bottom:14px;margin-bottom:20px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,4vw,42px);line-height:1.08}
+header p{color:var(--gris);font-style:italic;font-size:.88em;margin-top:5px}
+
+.controles{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:22px}
+fieldset{border:none}
+legend{font-family:var(--display);font-weight:600;text-transform:uppercase;
+  letter-spacing:.12em;font-size:13px;color:var(--gris);margin-bottom:7px}
+.grupo{display:flex;gap:8px;flex-wrap:wrap}
+.grupo button{font-family:var(--display);font-weight:600;font-size:16px;background:#fff;
+  color:var(--placa);border:3px solid var(--placa);padding:.5em 1em;cursor:pointer}
+.grupo button[aria-pressed="true"]{background:var(--placa);color:#fff}
+.grupo button:focus-visible{outline:4px solid var(--linea);outline-offset:3px}
+
+/* ---- flashcards ---- */
+.tarjeta{background:#fff;border:4px solid var(--tinta);min-height:240px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:32px 26px;text-align:center;cursor:pointer;width:100%;font:inherit;color:inherit}
+.tarjeta:focus-visible{outline:5px solid var(--linea);outline-offset:4px}
+.etiqueta{font-family:var(--display);font-weight:600;text-transform:uppercase;
+  letter-spacing:.14em;font-size:13px;color:var(--ambar);margin-bottom:12px}
+.cara{font-family:var(--display);font-weight:700;font-size:clamp(26px,4.6vw,44px);line-height:1.18}
+.reverso{font-size:clamp(18px,2.4vw,25px);color:var(--placa);margin-top:14px;font-weight:700}
+.pista{color:var(--gris);font-size:14px;font-style:italic;margin-top:18px}
+
+.barra{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px}
+.barra button{font-family:var(--display);font-weight:700;font-size:17px;background:var(--tinta);
+  color:#fff;border:3px solid var(--tinta);padding:.55em 1.15em;cursor:pointer}
+.barra button:hover{background:var(--placa);border-color:var(--placa)}
+.barra button:focus-visible{outline:4px solid var(--linea);outline-offset:3px}
+.cuenta{font-family:var(--display);font-weight:600;color:var(--gris);margin-left:auto;font-size:16px}
+
+/* ---- list ---- */
+h2{font-family:var(--display);font-weight:700;font-size:26px;margin:30px 0 4px;color:var(--placa)}
+h3{font-family:var(--display);font-weight:600;font-size:19px;margin:20px 0 5px}
+ul.limpia{list-style:none;padding:0;columns:2;column-gap:34px}
+ul.limpia li{padding:5px 0;border-bottom:1px solid #B4BECC;font-size:16.5px;
+  break-inside:avoid;-webkit-column-break-inside:avoid}
+ul.limpia b{color:var(--placa)}
+ul.limpia span{color:var(--gris);font-style:italic}
+.seccion[hidden]{display:none}
+.nota{border-left:6px solid var(--linea);padding:.5em 0 .5em 1em;font-size:.9em;margin-top:22px}
+.nota b{font-family:var(--display)}
+@media (max-width:640px){ul.limpia{columns:1}}
+@media print{
+  body{background:#fff;font-size:11.5pt;padding:0}
+  .controles,.barra,#vistaTarjetas{display:none!important}
+  #vistaLista{display:block!important}
+  .seccion[hidden]{display:block!important}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="envoltura">
+
+<nav class="barraNav" aria-label="Las p&aacute;ginas de la clase">
+  <a href="./">L&aacute;minas de clase</a>
+  <a href="guia.html">Hoja y tarjetas</a>
+  <button type="button" id="bImprimir">Imprimir la lista completa</button>
+</nav>
+
+<header>
+  <h1>Vocabulario &middot; Cap&iacute;tulo 15</h1>
+  <p>SPAN 2102 &middot; el mi&eacute;rcoles: la ciudad, el campo y el medio ambiente &middot; el viernes: el coche y las direcciones</p>
+</header>
+
+<div class="controles">
+  <fieldset>
+    <legend>Qu&eacute; d&iacute;a</legend>
+    <div class="grupo" id="dias">
+      <button type="button" data-d="todo" aria-pressed="true">Las dos clases</button>
+      <button type="button" data-d="miercoles" aria-pressed="false">Mi&eacute;rcoles</button>
+      <button type="button" data-d="viernes" aria-pressed="false">Viernes</button>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>C&oacute;mo estudiar</legend>
+    <div class="grupo" id="vistas">
+      <button type="button" data-v="tarjetas" aria-pressed="true">Tarjetas</button>
+      <button type="button" data-v="lista" aria-pressed="false">Lista completa</button>
+    </div>
+  </fieldset>
+</div>
+
+<section id="vistaTarjetas">
+  <button type="button" class="tarjeta" id="tarjeta" aria-describedby="pista">
+    <span class="etiqueta" id="grupoActual"></span>
+    <span class="cara" id="cara"></span>
+    <span class="reverso" id="reverso" hidden></span>
+    <span class="pista" id="pista">Toque la tarjeta, o pulse Entrar, para ver el significado.</span>
+  </button>
+  <p aria-live="polite" class="sr" id="anuncio" style="position:absolute;left:-9999px"></p>
+  <div class="barra">
+    <button type="button" id="anterior">Anterior</button>
+    <button type="button" id="voltear">Voltear</button>
+    <button type="button" id="siguiente">Siguiente</button>
+    <button type="button" id="mezclar">Mezclar</button>
+    <span class="cuenta" id="cuenta"></span>
+  </div>
+  <p class="nota"><b>Con el teclado:</b> flecha izquierda y derecha para cambiar de tarjeta, Entrar o barra espaciadora para voltear.</p>
+</section>
+
+<section id="vistaLista" hidden>
+  <div class="seccion" data-d="miercoles">
+    <h2>Mi&eacute;rcoles &middot; la ciudad, el campo y el medio ambiente</h2>
+      <h3>Lugares y desarrollo</h3>
+      <ul class="limpia">
+        <li><b>la ciudad</b> <span>the city</span></li>
+        <li><b>el campo</b> <span>the countryside</span></li>
+        <li><b>la fábrica</b> <span>the factory</span></li>
+        <li><b>la finca</b> <span>the farm</span></li>
+        <li><b>el campesino, la campesina</b> <span>farm worker, peasant</span></li>
+        <li><b>la agricultura</b> <span>farming, agriculture</span></li>
+        <li><b>el transporte público</b> <span>public transportation</span></li>
+        <li><b>los servicios</b> <span>services</span></li>
+        <li><b>el gobierno</b> <span>the government</span></li>
+        <li><b>la densidad de población</b> <span>population density</span></li>
+        <li><b>el ritmo de la vida</b> <span>the pace of life</span></li>
+      </ul>
+      <h3>La naturaleza y el medio ambiente</h3>
+      <ul class="limpia">
+        <li><b>la naturaleza</b> <span>nature</span></li>
+        <li><b>el medio ambiente</b> <span>the environment</span></li>
+        <li><b>la contaminación</b> <span>pollution</span></li>
+        <li><b>el reciclaje</b> <span>recycling</span></li>
+        <li><b>la energía eólica</b> <span>wind power</span></li>
+        <li><b>la energía solar</b> <span>solar power</span></li>
+        <li><b>la energía renovable</b> <span>renewable energy</span></li>
+        <li><b>la Tierra</b> <span>the Earth</span></li>
+      </ul>
+      <h3>Los animales</h3>
+      <ul class="limpia">
+        <li><b>la vaca</b> <span>the cow</span></li>
+        <li><b>el caballo</b> <span>the horse</span></li>
+        <li><b>el toro</b> <span>the bull</span></li>
+        <li><b>el pájaro</b> <span>the bird</span></li>
+        <li><b>el pez</b> <span>the fish</span></li>
+        <li><b>la ballena</b> <span>the whale</span></li>
+        <li><b>la especie en peligro de extinción</b> <span>endangered species</span></li>
+        <li><b>domesticado</b> <span>domesticated</span></li>
+        <li><b>salvaje</b> <span>wild</span></li>
+      </ul>
+      <h3>Verbos y adjetivos</h3>
+      <ul class="limpia">
+        <li><b>conservar</b> <span>to preserve, conserve</span></li>
+        <li><b>construir</b> <span>to build</span></li>
+        <li><b>contaminar</b> <span>to pollute</span></li>
+        <li><b>desarrollar</b> <span>to develop</span></li>
+        <li><b>destruir</b> <span>to destroy</span></li>
+        <li><b>fabricar</b> <span>to manufacture</span></li>
+        <li><b>proteger</b> <span>to protect</span></li>
+        <li><b>reciclar</b> <span>to recycle</span></li>
+        <li><b>bello</b> <span>beautiful</span></li>
+        <li><b>contaminado</b> <span>polluted</span></li>
+        <li><b>puro</b> <span>pure, clean</span></li>
+        <li><b>tranquilo</b> <span>calm, quiet</span></li>
+      </ul>
+  </div>
+  <div class="seccion" data-d="viernes">
+    <h2>Viernes &middot; el coche y las direcciones</h2>
+      <h3>La calle y el tránsito</h3>
+      <ul class="limpia">
+        <li><b>la acera</b> <span>the sidewalk</span></li>
+        <li><b>la autopista</b> <span>freeway, interstate</span></li>
+        <li><b>la avenida</b> <span>the avenue</span></li>
+        <li><b>la calle</b> <span>the street</span></li>
+        <li><b>la carretera</b> <span>road, highway</span></li>
+        <li><b>la esquina</b> <span>the corner</span></li>
+        <li><b>la circulación, el tránsito</b> <span>traffic</span></li>
+        <li><b>el semáforo</b> <span>the traffic light</span></li>
+        <li><b>el estacionamiento</b> <span>parking place, parking lot</span></li>
+        <li><b>la gasolinera, la estación de servicio</b> <span>the gas station</span></li>
+        <li><b>el taller</b> <span>the repair shop</span></li>
+      </ul>
+      <h3>El vehículo</h3>
+      <ul class="limpia">
+        <li><b>el coche, el carro</b> <span>the car</span></li>
+        <li><b>el auto, el automóvil</b> <span>the car</span></li>
+        <li><b>el vehículo</b> <span>the vehicle</span></li>
+        <li><b>la camioneta</b> <span>minivan, van</span></li>
+        <li><b>la moto, la motocicleta</b> <span>the motorcycle</span></li>
+        <li><b>la bicicleta</b> <span>the bicycle</span></li>
+        <li><b>descapotable</b> <span>convertible</span></li>
+        <li><b>híbrido</b> <span>hybrid</span></li>
+        <li><b>todoterreno</b> <span>all-terrain</span></li>
+        <li><b>la batería</b> <span>the battery</span></li>
+        <li><b>los frenos</b> <span>the brakes</span></li>
+        <li><b>la llanta</b> <span>the tire</span></li>
+        <li><b>la llanta desinflada</b> <span>the flat tire</span></li>
+        <li><b>el parabrisas</b> <span>the windshield</span></li>
+        <li><b>el tanque</b> <span>the tank</span></li>
+        <li><b>la gasolina</b> <span>gasoline</span></li>
+        <li><b>la licencia de manejar</b> <span>driver's license</span></li>
+        <li><b>el conductor, la conductora</b> <span>the driver</span></li>
+        <li><b>el mecánico, la mecánica</b> <span>the mechanic</span></li>
+      </ul>
+      <h3>Verbos del coche</h3>
+      <ul class="limpia">
+        <li><b>manejar, conducir (conduzco)</b> <span>to drive</span></li>
+        <li><b>arrancar</b> <span>to start up (a car)</span></li>
+        <li><b>arreglar</b> <span>to fix, repair</span></li>
+        <li><b>chocar con</b> <span>to run into, collide with</span></li>
+        <li><b>estacionar</b> <span>to park</span></li>
+        <li><b>gastar gasolina</b> <span>to use gas</span></li>
+        <li><b>llenar</b> <span>to fill up</span></li>
+        <li><b>obedecer (obedezco)</b> <span>to obey</span></li>
+        <li><b>parar</b> <span>to stop</span></li>
+        <li><b>revisar el aceite</b> <span>to check the oil</span></li>
+        <li><b>tocar la bocina</b> <span>to honk the horn</span></li>
+      </ul>
+      <h3>Para dar direcciones</h3>
+      <ul class="limpia">
+        <li><b>doblar</b> <span>to turn</span></li>
+        <li><b>seguir (sigo)</b> <span>to keep on going</span></li>
+        <li><b>a la derecha</b> <span>to the right</span></li>
+        <li><b>a la izquierda</b> <span>to the left</span></li>
+        <li><b>(todo) derecho, recto</b> <span>straight ahead</span></li>
+        <li><b>cruzar</b> <span>to cross</span></li>
+        <li><b>quedar</b> <span>to be located</span></li>
+        <li><b>enfrente de</b> <span>across from, facing</span></li>
+        <li><b>al lado de</b> <span>next to</span></li>
+        <li><b>entre … y …</b> <span>between … and …</span></li>
+        <li><b>detrás de</b> <span>behind</span></li>
+        <li><b>hasta</b> <span>as far as, until you reach</span></li>
+        <li><b>¿Cómo se llega a…?</b> <span>How do you get to…?</span></li>
+      </ul>
+      <h3>As&iacute; se dice &mdash; otras maneras de decirlo</h3>
+      <ul class="limpia">
+        <li><b>el estacionamiento</b> <span>el aparcamiento, el parking</span></li>
+        <li><b>la licencia de manejar</b> <span>el carnet de conducir, el permiso de manejar</span></li>
+        <li><b>la llanta</b> <span>el neumático, la rueda</span></li>
+        <li><b>arrancar</b> <span>encender el motor</span></li>
+        <li><b>estacionar</b> <span>aparcar (España), parquear (Colombia, México)</span></li>
+      </ul>
+  </div>
+  <p class="nota"><b>Para imprimir:</b> Ctrl/Cmd + P. Se imprime la lista completa de las dos clases, no las tarjetas.</p>
+</section>
+
+</div>
+
+<script>
+var TARJETAS = [{"es": "la ciudad", "en": "the city", "g": "Lugares y desarrollo", "d": "miercoles"}, {"es": "el campo", "en": "the countryside", "g": "Lugares y desarrollo", "d": "miercoles"}, {"es": "la fábrica", "en": "the factory", "g": "Lugares y desarrollo", "d": "miercoles"}, {"es": "la finca", "en": "the farm", "g": "Lugares y desarrollo", "d": "miercoles"}, {"es": "el campesino, la campesina", "en": "farm worker, peasant", "g": "Lugares y desarrollo", "d": "miercoles"}, {"es": "la agricultura", "en": "farming, agriculture", "g": "Lugares y desarrollo", "d": "miercoles"}, {"es": "el transporte público", "en": "public transportation", "g": "Lugares y desarrollo", "d": "miercoles"}, {"es": "los servicios", "en": "services", "g": "Lugares y desarrollo", "d": "miercoles"}, {"es": "el gobierno", "en": "the government", "g": "Lugares y desarrollo", "d": "miercoles"}, {"es": "la densidad de población", "en": "population density", "g": "Lugares y desarrollo", "d": "miercoles"}, {"es": "el ritmo de la vida", "en": "the pace of life", "g": "Lugares y desarrollo", "d": "miercoles"}, {"es": "la naturaleza", "en": "nature", "g": "La naturaleza y el medio ambiente", "d": "miercoles"}, {"es": "el medio ambiente", "en": "the environment", "g": "La naturaleza y el medio ambiente", "d": "miercoles"}, {"es": "la contaminación", "en": "pollution", "g": "La naturaleza y el medio ambiente", "d": "miercoles"}, {"es": "el reciclaje", "en": "recycling", "g": "La naturaleza y el medio ambiente", "d": "miercoles"}, {"es": "la energía eólica", "en": "wind power", "g": "La naturaleza y el medio ambiente", "d": "miercoles"}, {"es": "la energía solar", "en": "solar power", "g": "La naturaleza y el medio ambiente", "d": "miercoles"}, {"es": "la energía renovable", "en": "renewable energy", "g": "La naturaleza y el medio ambiente", "d": "miercoles"}, {"es": "la Tierra", "en": "the Earth", "g": "La naturaleza y el medio ambiente", "d": "miercoles"}, {"es": "la vaca", "en": "the cow", "g": "Los animales", "d": "miercoles"}, {"es": "el caballo", "en": "the horse", "g": "Los animales", "d": "miercoles"}, {"es": "el toro", "en": "the bull", "g": "Los animales", "d": "miercoles"}, {"es": "el pájaro", "en": "the bird", "g": "Los animales", "d": "miercoles"}, {"es": "el pez", "en": "the fish", "g": "Los animales", "d": "miercoles"}, {"es": "la ballena", "en": "the whale", "g": "Los animales", "d": "miercoles"}, {"es": "la especie en peligro de extinción", "en": "endangered species", "g": "Los animales", "d": "miercoles"}, {"es": "domesticado", "en": "domesticated", "g": "Los animales", "d": "miercoles"}, {"es": "salvaje", "en": "wild", "g": "Los animales", "d": "miercoles"}, {"es": "conservar", "en": "to preserve, conserve", "g": "Verbos y adjetivos", "d": "miercoles"}, {"es": "construir", "en": "to build", "g": "Verbos y adjetivos", "d": "miercoles"}, {"es": "contaminar", "en": "to pollute", "g": "Verbos y adjetivos", "d": "miercoles"}, {"es": "desarrollar", "en": "to develop", "g": "Verbos y adjetivos", "d": "miercoles"}, {"es": "destruir", "en": "to destroy", "g": "Verbos y adjetivos", "d": "miercoles"}, {"es": "fabricar", "en": "to manufacture", "g": "Verbos y adjetivos", "d": "miercoles"}, {"es": "proteger", "en": "to protect", "g": "Verbos y adjetivos", "d": "miercoles"}, {"es": "reciclar", "en": "to recycle", "g": "Verbos y adjetivos", "d": "miercoles"}, {"es": "bello", "en": "beautiful", "g": "Verbos y adjetivos", "d": "miercoles"}, {"es": "contaminado", "en": "polluted", "g": "Verbos y adjetivos", "d": "miercoles"}, {"es": "puro", "en": "pure, clean", "g": "Verbos y adjetivos", "d": "miercoles"}, {"es": "tranquilo", "en": "calm, quiet", "g": "Verbos y adjetivos", "d": "miercoles"}, {"es": "la acera", "en": "the sidewalk", "g": "La calle y el tránsito", "d": "viernes"}, {"es": "la autopista", "en": "freeway, interstate", "g": "La calle y el tránsito", "d": "viernes"}, {"es": "la avenida", "en": "the avenue", "g": "La calle y el tránsito", "d": "viernes"}, {"es": "la calle", "en": "the street", "g": "La calle y el tránsito", "d": "viernes"}, {"es": "la carretera", "en": "road, highway", "g": "La calle y el tránsito", "d": "viernes"}, {"es": "la esquina", "en": "the corner", "g": "La calle y el tránsito", "d": "viernes"}, {"es": "la circulación, el tránsito", "en": "traffic", "g": "La calle y el tránsito", "d": "viernes"}, {"es": "el semáforo", "en": "the traffic light", "g": "La calle y el tránsito", "d": "viernes"}, {"es": "el estacionamiento", "en": "parking place, parking lot", "g": "La calle y el tránsito", "d": "viernes"}, {"es": "la gasolinera, la estación de servicio", "en": "the gas station", "g": "La calle y el tránsito", "d": "viernes"}, {"es": "el taller", "en": "the repair shop", "g": "La calle y el tránsito", "d": "viernes"}, {"es": "el coche, el carro", "en": "the car", "g": "El vehículo", "d": "viernes"}, {"es": "el auto, el automóvil", "en": "the car", "g": "El vehículo", "d": "viernes"}, {"es": "el vehículo", "en": "the vehicle", "g": "El vehículo", "d": "viernes"}, {"es": "la camioneta", "en": "minivan, van", "g": "El vehículo", "d": "viernes"}, {"es": "la moto, la motocicleta", "en": "the motorcycle", "g": "El vehículo", "d": "viernes"}, {"es": "la bicicleta", "en": "the bicycle", "g": "El vehículo", "d": "viernes"}, {"es": "descapotable", "en": "convertible", "g": "El vehículo", "d": "viernes"}, {"es": "híbrido", "en": "hybrid", "g": "El vehículo", "d": "viernes"}, {"es": "todoterreno", "en": "all-terrain", "g": "El vehículo", "d": "viernes"}, {"es": "la batería", "en": "the battery", "g": "El vehículo", "d": "viernes"}, {"es": "los frenos", "en": "the brakes", "g": "El vehículo", "d": "viernes"}, {"es": "la llanta", "en": "the tire", "g": "El vehículo", "d": "viernes"}, {"es": "la llanta desinflada", "en": "the flat tire", "g": "El vehículo", "d": "viernes"}, {"es": "el parabrisas", "en": "the windshield", "g": "El vehículo", "d": "viernes"}, {"es": "el tanque", "en": "the tank", "g": "El vehículo", "d": "viernes"}, {"es": "la gasolina", "en": "gasoline", "g": "El vehículo", "d": "viernes"}, {"es": "la licencia de manejar", "en": "driver's license", "g": "El vehículo", "d": "viernes"}, {"es": "el conductor, la conductora", "en": "the driver", "g": "El vehículo", "d": "viernes"}, {"es": "el mecánico, la mecánica", "en": "the mechanic", "g": "El vehículo", "d": "viernes"}, {"es": "manejar, conducir (conduzco)", "en": "to drive", "g": "Verbos del coche", "d": "viernes"}, {"es": "arrancar", "en": "to start up (a car)", "g": "Verbos del coche", "d": "viernes"}, {"es": "arreglar", "en": "to fix, repair", "g": "Verbos del coche", "d": "viernes"}, {"es": "chocar con", "en": "to run into, collide with", "g": "Verbos del coche", "d": "viernes"}, {"es": "estacionar", "en": "to park", "g": "Verbos del coche", "d": "viernes"}, {"es": "gastar gasolina", "en": "to use gas", "g": "Verbos del coche", "d": "viernes"}, {"es": "llenar", "en": "to fill up", "g": "Verbos del coche", "d": "viernes"}, {"es": "obedecer (obedezco)", "en": "to obey", "g": "Verbos del coche", "d": "viernes"}, {"es": "parar", "en": "to stop", "g": "Verbos del coche", "d": "viernes"}, {"es": "revisar el aceite", "en": "to check the oil", "g": "Verbos del coche", "d": "viernes"}, {"es": "tocar la bocina", "en": "to honk the horn", "g": "Verbos del coche", "d": "viernes"}, {"es": "doblar", "en": "to turn", "g": "Para dar direcciones", "d": "viernes"}, {"es": "seguir (sigo)", "en": "to keep on going", "g": "Para dar direcciones", "d": "viernes"}, {"es": "a la derecha", "en": "to the right", "g": "Para dar direcciones", "d": "viernes"}, {"es": "a la izquierda", "en": "to the left", "g": "Para dar direcciones", "d": "viernes"}, {"es": "(todo) derecho, recto", "en": "straight ahead", "g": "Para dar direcciones", "d": "viernes"}, {"es": "cruzar", "en": "to cross", "g": "Para dar direcciones", "d": "viernes"}, {"es": "quedar", "en": "to be located", "g": "Para dar direcciones", "d": "viernes"}, {"es": "enfrente de", "en": "across from, facing", "g": "Para dar direcciones", "d": "viernes"}, {"es": "al lado de", "en": "next to", "g": "Para dar direcciones", "d": "viernes"}, {"es": "entre … y …", "en": "between … and …", "g": "Para dar direcciones", "d": "viernes"}, {"es": "detrás de", "en": "behind", "g": "Para dar direcciones", "d": "viernes"}, {"es": "hasta", "en": "as far as, until you reach", "g": "Para dar direcciones", "d": "viernes"}, {"es": "¿Cómo se llega a…?", "en": "How do you get to…?", "g": "Para dar direcciones", "d": "viernes"}];
+(function(){
+  var dia='todo', vista='tarjetas', i=0, volteada=false, mazo=[];
+  var cara=document.getElementById('cara'), rev=document.getElementById('reverso'),
+      grp=document.getElementById('grupoActual'), cuenta=document.getElementById('cuenta'),
+      pista=document.getElementById('pista'), anuncio=document.getElementById('anuncio');
+
+  function filtrar(){
+    mazo = TARJETAS.filter(function(t){ return dia==='todo' || t.d===dia; });
+    i=0; volteada=false; pintar();
+  }
+  function pintar(){
+    if(!mazo.length) return;
+    var t = mazo[i];
+    grp.textContent = t.g;
+    cara.textContent = t.es;
+    rev.textContent = t.en;
+    rev.hidden = !volteada;
+    pista.textContent = volteada
+      ? 'Toque otra vez para ocultar el significado.'
+      : 'Toque la tarjeta, o pulse Entrar, para ver el significado.';
+    cuenta.textContent = (i+1) + ' de ' + mazo.length;
+    anuncio.textContent = volteada ? (t.es + ': ' + t.en) : t.es;
+  }
+  function mover(n){
+    if(!mazo.length) return;
+    i = (i + n + mazo.length) % mazo.length; volteada=false; pintar();
+  }
+  function voltear(){ volteada=!volteada; pintar(); }
+
+  document.getElementById('tarjeta').addEventListener('click', voltear);
+  document.getElementById('voltear').addEventListener('click', function(e){ e.stopPropagation(); voltear(); });
+  document.getElementById('siguiente').addEventListener('click', function(){ mover(1); });
+  document.getElementById('anterior').addEventListener('click', function(){ mover(-1); });
+  document.getElementById('mezclar').addEventListener('click', function(){
+    for(var k=mazo.length-1;k>0;k--){ var j=Math.floor(Math.random()*(k+1)); var x=mazo[k]; mazo[k]=mazo[j]; mazo[j]=x; }
+    i=0; volteada=false; pintar();
+  });
+
+  document.addEventListener('keydown', function(e){
+    if(vista!=='tarjetas') return;
+    if(e.target.tagName==='BUTTON' && e.target.id!=='tarjeta' && (e.key===' '||e.key==='Enter')) return;
+    if(e.key==='ArrowRight'){ e.preventDefault(); mover(1); }
+    if(e.key==='ArrowLeft'){ e.preventDefault(); mover(-1); }
+  });
+
+  [].forEach.call(document.querySelectorAll('#dias button'), function(b){
+    b.addEventListener('click', function(){
+      dia=b.dataset.d;
+      [].forEach.call(document.querySelectorAll('#dias button'), function(o){
+        o.setAttribute('aria-pressed', String(o.dataset.d===dia)); });
+      [].forEach.call(document.querySelectorAll('.seccion'), function(s){
+        s.hidden = !(dia==='todo' || s.dataset.d===dia); });
+      filtrar();
+    });
+  });
+  [].forEach.call(document.querySelectorAll('#vistas button'), function(b){
+    b.addEventListener('click', function(){
+      vista=b.dataset.v;
+      [].forEach.call(document.querySelectorAll('#vistas button'), function(o){
+        o.setAttribute('aria-pressed', String(o.dataset.v===vista)); });
+      document.getElementById('vistaTarjetas').hidden = (vista!=='tarjetas');
+      document.getElementById('vistaLista').hidden = (vista!=='lista');
+    });
+  });
+
+  document.getElementById("bImprimir").addEventListener("click", function(){ window.print(); });
+
+  filtrar();
+})();
+</script>
+</body>
+</html>
